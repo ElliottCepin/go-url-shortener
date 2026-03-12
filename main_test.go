@@ -10,6 +10,15 @@ import (
 	"strings"
 )
 
+func TestGenerateShortcodeDuplicateEntries(t *testing.T) {
+	code1 := generateShortcode("Chickencoop", "https://hyper.link/0")
+	code2 := generateShortcode("Chickencoop", "https://hyper.link/1")
+
+	if (code1 == code2) {
+		t.Errorf("returned shortcodes are identical: %s, %s", code1, code2)
+	}
+}
+
 func TestShortenMalformedRequest(t *testing.T) {
 	reader := strings.NewReader("{\"URL\": \"http\")")
 
