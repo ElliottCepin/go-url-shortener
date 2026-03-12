@@ -24,13 +24,14 @@ func TestShortenReturnsCode(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	shorten(rec, req)
+	code := rec.Body.String()
 
-	matched, _ := regexp.MatchString("^([a-z]|[A-Z]|[0-9])*$", rec.Body.String())
-	if (matched) {
+	matched, _ := regexp.MatchString("^([a-z]|[A-Z]|[0-9])*$", code)
+	if (!matched) {
 		t.Errorf("%v is an invalid code: failed regex", rec.Body.String())
 	}
 
-	if (len(rec.Body.String()) < 10) {
+	if (len(code) < 10) {
 		t.Errorf("%v is an invalid code: length < 10", rec.Body.String())
 	}
 
