@@ -23,7 +23,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	err := json.NewDecoder(r.Body).Decode(&addr)
 
 	if (err != nil) {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, "JSON Invalid", http.StatusBadRequest)
 	}
 	
 	var code string = ""

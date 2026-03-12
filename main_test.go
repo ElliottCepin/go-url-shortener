@@ -2,11 +2,28 @@ package main
 
 import (
 	"net/http/httptest"
+	"net/http"
 	"testing"
 	"encoding/json"
 	"bytes"
 	"regexp"
+	"strings"
 )
+
+func TestShortenMalformedRequest(t *testing.T) {
+	reader := strings.NewReader("{\"URL\": \"http\")")
+
+	req := httptest.NewRequest("POST", "/shorten", reader)
+	rec := httptest.NewRecorder()
+	
+	shorten(rec, req)
+	
+	status := rec.Code
+
+	if (status != http.StatusBadRequest) {
+		t.Errorf("Expected error code %v. Got error code %v", http.StatusBadRequest, status)
+	}
+}	
 
 func TestShortenReturnsCode(t *testing.T) {
 	address := Address{"https://elliottcepin.dev/"}
