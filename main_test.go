@@ -10,6 +10,49 @@ import (
 	"strings"
 )
 
+func TestRedirect(t *testing.T) {
+	address := Address{"https://elliottcepin.dev/"}
+	jsonEncoded, err := json.Marshal(address)
+	
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	reader := bytes.NewReader(jsonEncoded)
+	
+	req := httptest.NewRequest("POST", "/shorten", reader)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+
+	shorten(rec, req)
+	code := rec.Body.String()
+
+	go func() {
+		if err := serve(); err != nil {
+			t.Errorf("Unexpected error %v", err)
+		}
+	}()
+	
+	res, err := http.Get("http://localhost:8080/" + code)
+
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	location := res.Header.Get("Location")
+	rescode := res.StatusCode
+
+	if (rescode != 301) {
+		t.Errorf("Expected response code 301, got %v", rescode)
+	}
+
+	if (location != "https://elliottcepin.dev/" ) {
+		t.Errorf("Expected redirect to 'https://elliottcepin.dev/', got %v", location)
+	}
+
+}
+
 func TestGenerateShortcodeDuplicateEntries(t *testing.T) {
 	code1 := generateShortcode("Chickencoop", "https://hyper.link/0")
 	code2 := generateShortcode("Chickencoop", "https://hyper.link/1")

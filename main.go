@@ -72,6 +72,9 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func serve() error {
+	return nil
+}
 func main() {
 
 }
