@@ -8,7 +8,74 @@ import (
 	"bytes"
 	"regexp"
 	"strings"
+	"time"
 )
+
+func TestStats(t *testing.T) {
+	address := Address{"https://elliottcepin.dev/"}
+	jsonEncoded, err := json.Marshal(address)
+	
+	
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	reader := bytes.NewReader(jsonEncoded)
+	
+	req := httptest.NewRequest("POST", "/shorten", reader)
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+
+	shorten(rec, req)
+	code := rec.Body.String()
+
+	go func() {
+		if err := serve(); err != nil {
+			t.Errorf("Unexpected error %v", err)
+		}
+	}()
+	
+	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request: %v", err)
+	}
+
+	// Ripped from stack overflow: Etienne Bruines
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	res, err := client.Do(req)
+
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+	
+	res, err = http.Get("http://localhost:8080/stats/" + code)
+	
+	var shortcode Shortcode
+
+	decoder := json.NewDecoder(res.Body)
+	err = decoder.Decode(&shortcode)
+
+	if (err != nil) {
+		t.Errorf("Unexpected decoder error %v", err)
+	}
+
+	if (shortcode.Clicks != 1) {
+		t.Errorf("Expected shortcode clicks to be 1, got: %v", shortcode.Clicks)
+	}
+
+	if (shortcode.CreatedAt.Day() != time.Now().Day()) {
+		t.Errorf("Expected shortcode creation day to be %v, got: %v", shortcode.CreatedAt.Day(), time.Now().Day())
+	}
+
+
+}
 
 func TestRedirect(t *testing.T) {
 	address := Address{"https://elliottcepin.dev/"}

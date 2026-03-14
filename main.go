@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"encoding/json"
 	"sync"
+	"time"
 )
 
 type Shortcode struct {
 	URL string
 	Code string
+	Clicks int
+	CreatedAt time.Time
 }
 
 type Address struct {
@@ -33,7 +36,7 @@ func generateShortcode(shortcode string, address string) string {
 			}
 		}
 		if (valid) {
-		shortcodes = append(shortcodes, Shortcode{address, shortcode})
+		shortcodes = append(shortcodes, Shortcode{address, shortcode, 0, time.Now()})
 			codeLock.Unlock()
 			return shortcode
 		}
@@ -73,9 +76,25 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 			w2.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		} 
+		
+		found := false
+		for _, shortcode := range shortcodes {
+			if shortcode.URL == addr.URL {
+				shortcode.Clicks += 1
+				found = true
+				break	
+			}
+		}
+		
+		if !found {
+			w2.WriteHeader(http.StatusInternalServerError)
+			return	
+		}
+		
 
 		w2.Header().Set("Location", addr.URL)
 		w2.WriteHeader(http.StatusMovedPermanently)
+		
 
 	})
 	fmt.Fprintf(w, "%v", code)
