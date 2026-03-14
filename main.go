@@ -49,7 +49,6 @@ func generateShortcode(shortcode string, address string) string {
 	}
 
 	return generateShortcode(code, address)
-
 }
 
 func shorten(w http.ResponseWriter, r *http.Request) {
@@ -63,16 +62,30 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 
 	if (err != nil) {
 		http.Error(w, "JSON Invalid", http.StatusBadRequest)
+		return
 	}
 	
 	code := generateShortcode("", addr.URL)
 
 
+	http.HandleFunc("/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
+		if (r2.Method != "GET") {
+			w2.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		} 
+
+		w2.Header().Set("Location", addr.URL)
+		w2.WriteHeader(http.StatusMovedPermanently)
+
+	})
 	fmt.Fprintf(w, "%v", code)
+
 
 }
 
 func serve() error {
+	http.ListenAndServe(":8080", nil)
+
 	return nil
 }
 func main() {

@@ -14,6 +14,7 @@ func TestRedirect(t *testing.T) {
 	address := Address{"https://elliottcepin.dev/"}
 	jsonEncoded, err := json.Marshal(address)
 	
+	
 	if (err != nil) {
 		t.Errorf("Unexpected Error: %v", err)
 	}
@@ -34,21 +35,38 @@ func TestRedirect(t *testing.T) {
 		}
 	}()
 	
-	res, err := http.Get("http://localhost:8080/" + code)
+	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request: %v", err)
+	}
+
+	// Ripped from stack overflow: Etienne Bruines
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	res, err := client.Do(req)
 
 	if (err != nil) {
 		t.Errorf("Unexpected Error: %v", err)
 	}
 
-	location := res.Header.Get("Location")
+	location, err := res.Location()
 	rescode := res.StatusCode
+
+	if (err != nil) {
+		t.Errorf("Unexpeccted error retrieving location: %v", err)
+	}
 
 	if (rescode != 301) {
 		t.Errorf("Expected response code 301, got %v", rescode)
 	}
 
-	if (location != "https://elliottcepin.dev/" ) {
-		t.Errorf("Expected redirect to 'https://elliottcepin.dev/', got %v", location)
+	if (location.String() != "https://elliottcepin.dev/" ) {
+		t.Errorf("Expected redirect to 'https://elliottcepin.dev/', got %v", location.String())
 	}
 
 }
