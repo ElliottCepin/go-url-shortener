@@ -76,11 +76,11 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 			w2.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		} 
-		
-		found := false
-		for _, shortcode := range shortcodes {
-			if shortcode.URL == addr.URL {
-				shortcode.Clicks += 1
+
+		found := false	
+		for i := 0; i<len(shortcodes); i++ {
+			if shortcodes[i].URL == addr.URL {
+				shortcodes[i].Clicks += 1
 				found = true
 				break	
 			}
@@ -94,6 +94,41 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 
 		w2.Header().Set("Location", addr.URL)
 		w2.WriteHeader(http.StatusMovedPermanently)
+		
+
+	})
+	http.HandleFunc("/stats/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
+		if (r2.Method != "GET") {
+			w2.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		} 
+		
+		found := false
+		var index int
+		for i := 0; i<len(shortcodes); i++ {
+			if shortcodes[i].URL == addr.URL {
+				found = true
+				index = i
+				break	
+			}
+		}
+	
+		if !found {
+			w2.WriteHeader(http.StatusBadRequest)
+			return	
+		}
+		
+
+		reader, err := json.Marshal(shortcodes[index])
+		w2.Header().Set("Content-Type", "application/json")
+
+		if (err != nil) {
+			w2.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w2.Write(reader)
+
 		
 
 	})
