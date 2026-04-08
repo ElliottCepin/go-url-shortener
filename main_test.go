@@ -9,9 +9,33 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"io"
 )
 
-func TestStats(t *testing.T) {
+
+func TestLoggerStats(t *testing.T) {
+	// the basic idea is to get the logger to write to io.Writer
+	// then, we can test different cases
+	// First, however, we have to actually know what our logger looks like.
+	
+	// STEPS:
+	// - set up mux
+	// - handle endpoints wrapped with logger
+	// - logger should take an io.Writer
+	// - figure out what io.write to use for testing
+	// - test logger outputs
+	// - - figure out what ip gets used if you do go test
+
+	var b bytes.Buffer
+
+	root := http.NewServeMux()
+	
+	go func () {
+		if err := serve(root, &b); err != nil {
+			t.Errorf("Unexpected Error: %v", err)
+		}
+	}()
+	
 	address := Address{"https://elliottcepin.dev/"}
 	jsonEncoded, err := json.Marshal(address)
 	
@@ -21,26 +45,59 @@ func TestStats(t *testing.T) {
 	}
 
 	reader := bytes.NewReader(jsonEncoded)
-	
-	req := httptest.NewRequest("POST", "/shorten", reader)
-	req.Header.Set("Content-Type", "application/json")
 
-	rec := httptest.NewRecorder()
-
-	shorten(rec, req)
-	code := rec.Body.String()
-
-	go func() {
-		if err := serve(); err != nil {
-			t.Errorf("Unexpected error %v", err)
-		}
-	}()
-	
-	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+	req, err := http.NewRequest("GET", "http://localhost:8080/shorten", reader)
 
 	if err != nil {
 		t.Errorf("Unexpected error with request: %v", err)
 	}
+
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	_, err = client.Do(req)
+	
+	if err != nil {
+		t.Errorf("Unexpected error enacting request: %v", err)
+	}
+	
+	logged := b.String()
+	if (logged != "this got logged") {
+		t.Errorf("Expected to log 'this got logged', instead logged: %s", logged)
+	}
+	
+}
+
+func TestStats(t *testing.T) {
+	mux := http.NewServeMux()
+	address := Address{"https://elliottcepin.dev/"}
+	var b bytes.Buffer
+
+	go func() {
+		if err := serve(mux, &b); err != nil {
+			t.Errorf("Unexpected error %v", err)
+		}
+	}()
+
+	jsonEncoded, err := json.Marshal(address)
+	
+	
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	reader := bytes.NewReader(jsonEncoded)
+	
+	req, err := http.NewRequest("POST", "http://localhost:8080/shorten", reader)
+
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
 
 	// Ripped from stack overflow: Etienne Bruines
 	client := &http.Client{
@@ -50,6 +107,26 @@ func TestStats(t *testing.T) {
 	}
 
 	res, err := client.Do(req)
+
+	body, err := io.ReadAll(res.Body)
+
+	if err != nil {
+		t.Errorf("Unexpected error reading request body: %v", err)
+	}
+
+	defer res.Body.Close()
+	code := string(body)
+
+
+	
+	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request: %v", err)
+	}
+
+
+	res, err = client.Do(req)
 
 	if (err != nil) {
 		t.Errorf("Unexpected Error: %v", err)
@@ -78,6 +155,8 @@ func TestStats(t *testing.T) {
 }
 
 func TestRedirect(t *testing.T) {
+	mux := http.NewServeMux()
+	var b bytes.Buffer
 	address := Address{"https://elliottcepin.dev/"}
 	jsonEncoded, err := json.Marshal(address)
 	
@@ -87,26 +166,20 @@ func TestRedirect(t *testing.T) {
 	}
 
 	reader := bytes.NewReader(jsonEncoded)
-	
-	req := httptest.NewRequest("POST", "/shorten", reader)
+
+	req, err := http.NewRequest("POST", "http://localhost:8080/shorten", reader)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request setup: %v", err)
+	}
+
 	req.Header.Set("Content-Type", "application/json")
 
-	rec := httptest.NewRecorder()
-
-	shorten(rec, req)
-	code := rec.Body.String()
-
 	go func() {
-		if err := serve(); err != nil {
+		if err := serve(mux, &b); err != nil {
 			t.Errorf("Unexpected error %v", err)
 		}
 	}()
-	
-	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
-
-	if err != nil {
-		t.Errorf("Unexpected error with request: %v", err)
-	}
 
 	// Ripped from stack overflow: Etienne Bruines
 	client := &http.Client{
@@ -116,6 +189,29 @@ func TestRedirect(t *testing.T) {
 	}
 
 	res, err := client.Do(req)
+
+	if err != nil {
+		t.Errorf("Unexpected error enacting request: %v", err)
+	}
+	
+	body, err := io.ReadAll(res.Body)
+	
+	if err != nil {
+		t.Errorf("Unexpected error reading request body: %v", err)
+	}
+
+	defer res.Body.Close()
+
+	code := string(body)
+	
+	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request: %v", err)
+	}
+
+
+	res, err = client.Do(req)
 
 	if (err != nil) {
 		t.Errorf("Unexpected Error: %v", err)
@@ -148,6 +244,8 @@ func TestGenerateShortcodeDuplicateEntries(t *testing.T) {
 }
 
 func TestShortenMalformedRequest(t *testing.T) {
+	mux := http.NewServeMux()
+	shorten := wrapShorten(mux)
 	reader := strings.NewReader("{\"URL\": \"http\")")
 
 	req := httptest.NewRequest("POST", "/shorten", reader)
@@ -163,6 +261,8 @@ func TestShortenMalformedRequest(t *testing.T) {
 }	
 
 func TestShortenReturnsCode(t *testing.T) {
+	mux := http.NewServeMux()
+	shorten := wrapShorten(mux)
 	address := Address{"https://elliottcepin.dev/"}
 	jsonEncoded, err := json.Marshal(address)
 	
@@ -195,6 +295,8 @@ func TestShortenReturnsCode(t *testing.T) {
 }
 
 func TestShortenGet(t *testing.T) {
+	mux := http.NewServeMux()
+	shorten := wrapShorten(mux)
 	req := httptest.NewRequest("GET", "/shorten", nil)
 	rec := httptest.NewRecorder()
 

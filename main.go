@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"sync"
 	"time"
+	"io"
 )
 
 type Shortcode struct {
@@ -53,8 +54,8 @@ func generateShortcode(shortcode string, address string) string {
 
 	return generateShortcode(code, address)
 }
-
-func shorten(w http.ResponseWriter, r *http.Request) {
+func wrapShorten(mux *http.ServeMux) (http.HandlerFunc) {
+	return func(w http.ResponseWriter, r *http.Request) {
 	if (r.Method != "POST") {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
@@ -71,7 +72,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	code := generateShortcode("", addr.URL)
 
 
-	http.HandleFunc("/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
+	mux.HandleFunc("/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
 		if (r2.Method != "GET") {
 			w2.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -97,7 +98,7 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 		
 
 	})
-	http.HandleFunc("/stats/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
+	mux.HandleFunc("/stats/" + code, func(w2 http.ResponseWriter, r2 *http.Request) {
 		if (r2.Method != "GET") {
 			w2.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -134,11 +135,20 @@ func shorten(w http.ResponseWriter, r *http.Request) {
 	})
 	fmt.Fprintf(w, "%v", code)
 
-
+	}
 }
 
-func serve() error {
-	http.ListenAndServe(":8080", nil)
+func logger(next *http.HandlerFunc, writer io.Writer) (http.HandlerFunc){
+	return func (w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w,r)
+	}
+}
+
+
+func serve(mux *http.ServeMux, writer io.Writer) error {
+	shorten := wrapShorten(mux)
+	mux.Handle("/shorten", logger(&shorten, writer))
+	http.ListenAndServe(":8080", mux)
 
 	return nil
 }
