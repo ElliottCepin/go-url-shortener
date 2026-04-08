@@ -140,6 +140,7 @@ func wrapShorten(mux *http.ServeMux) (http.HandlerFunc) {
 
 func logger(next *http.HandlerFunc, writer io.Writer) (http.HandlerFunc){
 	return func (w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(writer, "this got logged")
 		next.ServeHTTP(w,r)
 	}
 }
