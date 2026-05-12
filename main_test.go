@@ -10,22 +10,11 @@ import (
 	"strings"
 	"time"
 	"io"
+	"os"
 )
 
 
 func TestLoggerStats(t *testing.T) {
-	// the basic idea is to get the logger to write to io.Writer
-	// then, we can test different cases
-	// First, however, we have to actually know what our logger looks like.
-	
-	// STEPS:
-	// - set up mux
-	// - handle endpoints wrapped with logger
-	// - logger should take an io.Writer
-	// - figure out what io.write to use for testing
-	// - test logger outputs
-	// - - figure out what ip gets used if you do go test
-
 	var b bytes.Buffer
 
 	root := http.NewServeMux()
@@ -63,10 +52,11 @@ func TestLoggerStats(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error enacting request: %v", err)
 	}
-	
+		
 	logged := b.String()
-	if (logged != "this got logged") {
-		t.Errorf("Expected to log 'this got logged', instead logged: %s", logged)
+	expected := "method: GET, ip: ::1"
+	if (logged != expected) {
+		t.Errorf("Expected to log '%s', instead logged: %s", expected, logged)
 	}
 	
 }
@@ -122,7 +112,7 @@ func TestStats(t *testing.T) {
 	req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
 
 	if err != nil {
-		t.Errorf("Unexpected error with request: %v", err)
+		t.Fatalf("Unexpected error with request: %v", err)
 	}
 
 
@@ -245,7 +235,7 @@ func TestGenerateShortcodeDuplicateEntries(t *testing.T) {
 
 func TestShortenMalformedRequest(t *testing.T) {
 	mux := http.NewServeMux()
-	shorten := wrapShorten(mux)
+	shorten := wrapShorten(mux, os.Stdout)
 	reader := strings.NewReader("{\"URL\": \"http\")")
 
 	req := httptest.NewRequest("POST", "/shorten", reader)
@@ -262,7 +252,7 @@ func TestShortenMalformedRequest(t *testing.T) {
 
 func TestShortenReturnsCode(t *testing.T) {
 	mux := http.NewServeMux()
-	shorten := wrapShorten(mux)
+	shorten := wrapShorten(mux, os.Stdout)
 	address := Address{"https://elliottcepin.dev/"}
 	jsonEncoded, err := json.Marshal(address)
 	
@@ -296,7 +286,7 @@ func TestShortenReturnsCode(t *testing.T) {
 
 func TestShortenGet(t *testing.T) {
 	mux := http.NewServeMux()
-	shorten := wrapShorten(mux)
+	shorten := wrapShorten(mux, os.Stdout)
 	req := httptest.NewRequest("GET", "/shorten", nil)
 	rec := httptest.NewRecorder()
 
@@ -307,3 +297,76 @@ func TestShortenGet(t *testing.T) {
 	}
 }
 
+func TestRateLimiting(t *testing.T) {
+	mux := http.NewServeMux()
+	var b bytes.Buffer
+	address := Address{"https://different-site.dev/"}
+	jsonEncoded, err := json.Marshal(address)
+	
+	
+	if (err != nil) {
+		t.Errorf("Unexpected Error: %v", err)
+	}
+
+	reader := bytes.NewReader(jsonEncoded)
+
+	req, err := http.NewRequest("POST", "http://localhost:8080/shorten", reader)
+
+	if err != nil {
+		t.Errorf("Unexpected error with request setup: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	go func() {
+		if err := serve(mux, &b); err != nil {
+			t.Errorf("Unexpected error %v", err)
+		}
+	}()
+
+	// Ripped from stack overflow: Etienne Bruines
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	res, err := client.Do(req)
+
+	if err != nil {
+		t.Errorf("Unexpected error enacting request: %v", err)
+	}
+	
+	body, err := io.ReadAll(res.Body)
+	
+	if err != nil {
+		t.Errorf("Unexpected error reading request body: %v", err)
+	}
+
+	defer res.Body.Close()
+
+	code := string(body)
+	
+	for i := 0; i < 3; i++ {
+		req, err = http.NewRequest("GET", "http://localhost:8080/" + code, nil)
+
+		if err != nil {
+			t.Errorf("Unexpected error with request: %v", err)
+		}
+
+
+		res, err = client.Do(req)
+
+		if (err != nil) {
+			t.Errorf("Unexpected Error: %v", err)
+		}
+
+		if (i == 10 && res.StatusCode != 403) {
+			t.Errorf("Expected forbidden on attempt #%v; got %v", i, res.StatusCode)
+		} else if (res.StatusCode != 301 && i < 10) {
+			t.Errorf("Expected effective redirect on attempt #%v; got %v", i, res.StatusCode)
+		}
+	}
+
+
+}
